@@ -59,6 +59,33 @@ Kontrola po zápisu (adresy vytáhni `nm` z elfu): `armed = 1`, `servoPwm = 1`,
 > aplikace** (`AM32-bootloader/bootloader/main.c:429`). Vypadá to jako špatně
 > nahraný firmware, ale chybí jen tenhle soubor.
 
+## Pípání motorem na povel z časovače
+
+`CL_SERVO_TONES` v targetu zapíná `clServoTone()` v [`Src/signal.c`](../Src/signal.c).
+Časovač jede v pásmu 1200–2000 µs, takže vše pod prahem stopu je volné a použité
+jako povelový kanál:
+
+| Puls | Povel | Zvuk |
+|---|---|---|
+| 1120–1160 µs | tón 1 — odpočet spuštěn | `playDefaultTone()`, ~300 ms |
+| 1060–1100 µs | tón 2 — poslední sekundy před startem | `playChangedTone()`, ~300 ms |
+| 1000–1040 µs | tón 3 — chyba časovače | `playBeaconTune3()`, ~600 ms (melodie) |
+
+Mezi pásmy jsou mezery 20 µs, protože generátor serva na ESP32 zaokrouhluje pulz
+o jednotky mikrosekund a s opakovací frekvencí se to mění. Povel platí až po
+`CL_TONE_DEBOUNCE` snímcích v pásmu (při 250 Hz je 20 snímků 80 ms) a spustí se jen
+jednou při vstupu do pásma, takže držení pásma nepípá dokola.
+
+Všechna pásma leží pod prahem stopu, takže je ESC čte jako nulový plyn a armování
+to neruší.
+
+> **Bezpečnost:** pípání roztáčí cívky motoru, proto se povel ignoruje, když motor
+> běží (`!running`). Za letu ho nejde vyvolat ani chybou v časovači. Časovač si to
+> hlídá podruhé na své straně.
+
+Bez DShotu jinak pípnout nejde — `play_tone_flag` nastavuje v původním AM32 jedině
+`Src/dshot.c` (beacon povely 1–5) a ze servo vstupu k němu nevede žádná cesta.
+
 ## Kalibrace konstant v targetu
 
 Obě konstanty v `CL_ARIA_F051` jsou změřené na kuse č. 1, ne převzaté:

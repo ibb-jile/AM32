@@ -2159,6 +2159,11 @@
 // regulatoru uplny zacatek rozsahu - pred provoznim pouzitim preverit pri
 // proudu blizsim skutecne zatezi.
 #define MILLIVOLT_PER_AMP 16
+// Pipani motorem na povel z casovace pulzy pod prahem stopu (viz Src/signal.c).
+// Pocet snimcu, po ktery musi puls v pasmu vydrzet: pri 250 Hz je 20 snimku 80 ms,
+// coz je dost na potlaceni zakmitu a zaroven kratsi nez povelovy pulz z casovace.
+#define CL_SERVO_TONES
+#define CL_TONE_DEBOUNCE 20
 #endif
 
 #ifdef HVFLYCOLOR_F051

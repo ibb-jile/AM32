@@ -46,10 +46,62 @@ void computeMSInput()
     }
 }
 
+#ifdef CL_SERVO_TONES
+// CL-ESC: pipani motorem na povel z casovace.
+//
+// Casovac jede v pasmu 1200-2000 us, takze vsechno pod 1180 us je volne a da se
+// pouzit jako povelovy kanal. Tri pasma = tri ruzne tony; mezi nimi jsou mezery
+// 20 us, aby zaokrouhleni generatoru serva na ESP32 (jednotky us, meni se s
+// opakovaci frekvenci) nikdy nepreteklo do sousedniho pasma.
+//
+//   1000-1040 us -> ton 3 (melodie, chyba casovace)
+//   1060-1100 us -> ton 2 (odpocet, posledni sekundy)
+//   1120-1160 us -> ton 1 (odpocet spusten)
+//
+// Povel plati az po CL_TONE_DEBOUNCE snimcich v pasmu a spusti se jen jednou pri
+// vstupu do nej, takze drzeni pasma nepipa dokola. Vsechna pasma lezi pod prahem
+// stopu, takze je ESC porad cte jako nulovy plyn a armovani to nijak nerusi.
+//
+// BEZPECNOST: pipani roztaci civky motoru, proto se povel ignoruje, kdyz motor
+// bezi. Za letu tedy nejde vyvolat ani chybou v casovaci.
+static uint8_t cl_tone_count = 0;
+static uint8_t cl_tone_band = 0;
+
+static void clServoTone(uint16_t pulse)
+{
+    uint8_t band = 0;
+    if (pulse >= 1000 && pulse <= 1040) {
+        band = 3;
+    } else if (pulse >= 1060 && pulse <= 1100) {
+        band = 2;
+    } else if (pulse >= 1120 && pulse <= 1160) {
+        band = 1;
+    }
+
+    if (band == 0) { // mimo pasmo - pripravit se na dalsi povel
+        cl_tone_band = 0;
+        cl_tone_count = 0;
+        return;
+    }
+    if (band != cl_tone_band) { // zmena pasma zacina pocitat znovu
+        cl_tone_band = band;
+        cl_tone_count = 0;
+    }
+    if (cl_tone_count < CL_TONE_DEBOUNCE) {
+        if (++cl_tone_count == CL_TONE_DEBOUNCE && !running) {
+            play_tone_flag = band;
+        }
+    }
+}
+#endif
+
 void computeServoInput()
 {
     if (((dma_buffer[1] - dma_buffer[0]) > 800) && ((dma_buffer[1] - dma_buffer[0]) < 2200)) {
 				signaltimeout = 0;
+#ifdef CL_SERVO_TONES
+        clServoTone(dma_buffer[1] - dma_buffer[0]);
+#endif
         if (calibration_required) {
             if (!high_calibration_set) {
                 if (high_calibration_counts == 0) {
