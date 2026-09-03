@@ -2164,6 +2164,23 @@
 // coz je dost na potlaceni zakmitu a zaroven kratsi nez povelovy pulz z casovace.
 #define CL_SERVO_TONES
 #define CL_TONE_DEBOUNCE 20
+// Stavova RGB LED na desce. Spolecna anoda na 3,3 V, katody pres odpory do
+// procesoru -> barva sviti pri NULE na pinu. Piny zmereny na kuse c. 1.
+//   cervena PA15, zelena PB3, modra PB4
+// MODER: pole pinu n je na bitech 2n+1:2n, hodnota 01 = vystup.
+#define CL_STATUS_LED
+#define CL_LED_RED_PORT         GPIOA
+#define CL_LED_RED_PIN          LL_GPIO_PIN_15
+#define CL_LED_RED_MODER_MASK   (3U << 30)
+#define CL_LED_RED_MODER_OUT    (1U << 30)
+#define CL_LED_GREEN_PORT       GPIOB
+#define CL_LED_GREEN_PIN        LL_GPIO_PIN_3
+#define CL_LED_GREEN_MODER_MASK (3U << 6)
+#define CL_LED_GREEN_MODER_OUT  (1U << 6)
+#define CL_LED_BLUE_PORT        GPIOB
+#define CL_LED_BLUE_PIN         LL_GPIO_PIN_4
+#define CL_LED_BLUE_MODER_MASK  (3U << 8)
+#define CL_LED_BLUE_MODER_OUT   (1U << 8)
 #endif
 
 #ifdef HVFLYCOLOR_F051

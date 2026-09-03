@@ -1339,6 +1339,54 @@ if (!stepper_sine && armed) {
 #endif
 }
 
+#ifdef CL_STATUS_LED
+/*
+  CL-ESC: stavova RGB LED.
+
+  Deska ma LED se spolecnou anodou na 3,3 V a katodami pres odpory do procesoru,
+  takze barva sviti pri NULE na pinu. Zmereno na kuse c. 1 (viz cl-esc/README.md).
+
+  AM32 ma sice vlastni USE_RGB_LED, ale nepouzivame ho: setIndividualRGBLed()
+  rozsvecuje az pri hodnote > 1 a vsechna volani v main.c posilaji 0/1, takze
+  nikdy nic nerozsviti. Mame vlastni piny i vlastni stavy.
+
+    cervena          nearmovano / bez signalu
+    zelena           armovano, pripraveno
+    modra            motor bezi
+    cervena blikajici  podpetova ochrana vypnula (nutny power-cycle)
+*/
+static void clLedSet(uint8_t r, uint8_t g, uint8_t b)
+{
+    if (r) { CL_LED_RED_PORT->BRR = CL_LED_RED_PIN; }     else { CL_LED_RED_PORT->BSRR = CL_LED_RED_PIN; }
+    if (g) { CL_LED_GREEN_PORT->BRR = CL_LED_GREEN_PIN; } else { CL_LED_GREEN_PORT->BSRR = CL_LED_GREEN_PIN; }
+    if (b) { CL_LED_BLUE_PORT->BRR = CL_LED_BLUE_PIN; }   else { CL_LED_BLUE_PORT->BSRR = CL_LED_BLUE_PIN; }
+}
+
+static void clLedInit(void)
+{
+    clLedSet(0, 0, 0); // zhasnout drive, nez se piny stanou vystupy
+    CL_LED_RED_PORT->MODER = (CL_LED_RED_PORT->MODER & ~CL_LED_RED_MODER_MASK) | CL_LED_RED_MODER_OUT;
+    CL_LED_GREEN_PORT->MODER = (CL_LED_GREEN_PORT->MODER & ~CL_LED_GREEN_MODER_MASK) | CL_LED_GREEN_MODER_OUT;
+    CL_LED_BLUE_PORT->MODER = (CL_LED_BLUE_PORT->MODER & ~CL_LED_BLUE_MODER_MASK) | CL_LED_BLUE_MODER_OUT;
+}
+
+static void clLedUpdate(void)
+{
+    // ledcounter bezi v tenKhzRoutine a nic jineho ho u nas nenuluje (nulovala by
+    // ho jen vetev USE_CUSTOM_LED, kterou nepouzivame), takze slouzi jako casova
+    // zakladna blikani. Bit 12 se prevraci po 4096 ticich, tedy zhruba 4x za sekundu.
+    if (LOW_VOLTAGE_CUTOFF) {
+        clLedSet((ledcounter & 0x1000) != 0, 0, 0);
+    } else if (running) {
+        clLedSet(0, 0, 1);
+    } else if (armed) {
+        clLedSet(0, 1, 0);
+    } else {
+        clLedSet(1, 0, 0);
+    }
+}
+#endif
+
 void tenKhzRoutine()
 { // 20khz as of 2.00 to be renamed
     duty_cycle = duty_cycle_setpoint;
@@ -1842,6 +1890,9 @@ int main(void)
 #ifdef USE_RGB_LED
      setIndividualRGBLed(1,0,0);
 #endif
+#ifdef CL_STATUS_LED
+    clLedInit();
+#endif
 
 #ifdef USE_CRSF_INPUT
     inputSet = 1;
@@ -2002,6 +2053,9 @@ if(zero_crosses < 5){
                 NVIC_SystemReset();
             }
         }
+#ifdef CL_STATUS_LED
+        clLedUpdate();
+#endif
 #ifdef USE_CUSTOM_LED
         if ((input >= 47) && (input < 1947)) {
             if (ledcounter > (2000 >> forward)) {

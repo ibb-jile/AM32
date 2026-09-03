@@ -86,6 +86,35 @@ to neruší.
 Bez DShotu jinak pípnout nejde — `play_tone_flag` nastavuje v původním AM32 jedině
 `Src/dshot.c` (beacon povely 1–5) a ze servo vstupu k němu nevede žádná cesta.
 
+## Stavová RGB LED
+
+`CL_STATUS_LED` zapíná vlastní signalizaci v [`Src/main.c`](../Src/main.c). Deska má
+RGB LED se **společnou anodou** na 3,3 V a katodami přes odpory do procesoru, takže
+barva svítí při **nule** na pinu. Piny i polarita jsou změřené na kuse č. 1:
+
+| Barva | Pin |
+|---|---|
+| červená | **PA15** (má na desce pull-up) |
+| zelená | **PB3** |
+| modrá | **PB4** |
+
+Signalizované stavy:
+
+| Barva | Stav |
+|---|---|
+| červená | nearmováno / bez signálu |
+| zelená | armováno, připraveno |
+| modrá | motor běží |
+| červená blikající ~2 Hz | podpěťová ochrana vypnula — nutný power-cycle |
+
+Vlastní `USE_RGB_LED` z AM32 nepoužíváme, protože **nefunguje**:
+`setIndividualRGBLed()` rozsvěcuje až při hodnotě `> 1`, ale všechna volání v
+`main.c` posílají 0/1 (`setIndividualRGBLed(1,0,0)`), takže vždy spadnou do větve
+„zhasnout". Rozsvítí se jen na okamžik po `LED_GPIO_init()`, kde jsou piny v nule.
+
+Jako časová základna blikání slouží `ledcounter` z `tenKhzRoutine()` — u nás ho nic
+nenuluje, protože větev `USE_CUSTOM_LED` nepoužíváme.
+
 ## Kalibrace konstant v targetu
 
 Obě konstanty v `CL_ARIA_F051` jsou změřené na kuse č. 1, ne převzaté:
