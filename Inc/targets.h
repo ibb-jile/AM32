@@ -2145,13 +2145,26 @@
 #define DEAD_TIME 45
 #define HARDWARE_GROUP_F0_A
 #define USE_SERIAL_TELEMETRY
+// POZOR: TATO DESKA NEMERI NAPETI BATERIE.
+//
+// ARIA_RAMP_F051 uvadi delic na PA6, ale na tomhle kuse PA6 s napetim baterie
+// nesouvisi: pri poklesu z 12,0 V na 5,7 V se syrova hodnota ADC nezmenila
+// (1320 dilku v obou pripadech) a nehnou s ni ani vnitrni pull-up/pull-down,
+// takze je to nizkoimpedancni pevny zdroj ~1,064 V. Na teplo taky nereaguje
+// (jadro slo z 33 na 38 C, hodnota stala), takze to neni ani NTC.
+//
+// Volny ADC pin uz nezbyva: PA0/PA4/PA5 jsou komparatory fazi, PA2 signal,
+// PA3 proud, PA7 spodni gate, PA1 je natvrdo na zemi (5 mV i proti pull-upu).
+//
+// VOLTAGE_ADC_CHANNEL musi byt definovany, jinak se ADC neprelozi. Zustava tedy
+// PA6, ale battery_voltage z nej vychazi jako konstanta a NESMI se pouzivat.
+// Dusledek: podpetova ochrana na teto desce nefunguje a v EEPROM je vypnuta
+// (bajt 36 = 0). Kdyby zustala zapnuta, tvarila by se jako funkcni ochrana,
+// ktera nikdy nezabere - to je horsi nez zadna.
 #define VOLTAGE_ADC_CHANNEL LL_ADC_CHANNEL_6
 #define VOLTAGE_ADC_PIN LL_GPIO_PIN_6
 #define CURRENT_ADC_CHANNEL LL_ADC_CHANNEL_3
 #define CURRENT_ADC_PIN LL_GPIO_PIN_3
-// Zmereno na kuse c. 1: 1062 mV na PA6 pri 11,982 V na ploskach V+/V-.
-// 113 dava 12,00 V (+0,02), 112 by davalo 11,89 V (-0,09).
-#define TARGET_VOLTAGE_DIVIDER 113
 // Proud zmeren proti laboratornimu zdroji pri 17 000 1/min bez vrtule:
 // 1,14 A -> raw 22,6 a 1,19 A -> raw 25,2, v klidu raw = 0 (charakteristika
 // prochazi pocatkem, takze CURRENT_OFFSET zustava 0). Vazeny prumer dava

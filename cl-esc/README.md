@@ -119,11 +119,43 @@ nenuluje, protože větev `USE_CUSTOM_LED` nepoužíváme.
 
 Obě konstanty v `CL_ARIA_F051` jsou změřené na kuse č. 1, ne převzaté:
 
-- `TARGET_VOLTAGE_DIVIDER 113` — 1062 mV na PA6 při 11,982 V na ploškách `V+`/`V-`.
-  Firmware pak hlásí 11,91–12,01 V.
 - `MILLIVOLT_PER_AMP 16` — proti laboratornímu zdroji při 17 000 1/min bez vrtule.
   V klidu je syrová hodnota ADC nulová, takže charakteristika prochází počátkem
   a `CURRENT_OFFSET` zůstává 0. Ověření dalo 1,153 A proti 1,14 A ze zdroje (+1,1 %).
 
 **Proud je kalibrovaný jen okolo 1 A**, což je u 70A regulátoru úplný začátek
 rozsahu. Před provozním nasazením ho přeměř při zátěži blíž skutečnému odběru.
+
+## Napětí baterie se na této desce měřit nedá
+
+`ARIA_RAMP_F051` uvádí dělič na PA6, ale tady PA6 s baterií nesouvisí:
+
+| Změna | `ADC_raw_volts` |
+|---|---|
+| 12,0 V → 5,7 V na `V+` | 1320 → 1320 |
+| ohřev, jádro 33 → 38 °C | 1320 → 1320 |
+| vnitřní pull-up i pull-down 40 kΩ | 1320 → 1320 |
+
+Je to nízkoimpedanční pevný zdroj 1,064 V. Hodnota 1320 ze 4095 je přesně **0,3224
+reference ADC**, a protože referencí je tentýž 3,3V rail, ze kterého procesor žije,
+je to **dělič z 3,3 V** — signál i reference se škálují spolu, takže poměr je
+neměnný za všech okolností.
+
+Volný ADC pin už nezbývá: PA0/PA4/PA5 jsou komparátory fází, PA2 signál, PA3 proud,
+PA7 spodní gate, PA1 je natvrdo na zemi (5 mV i proti pull-upu 40 kΩ).
+
+**Důsledky:**
+
+- `TARGET_VOLTAGE_DIVIDER` se nedefinuje a podpěťová ochrana je v EEPROM vypnutá.
+  Zapnutá by se tvářila jako funkční ochrana, která nikdy nezabere.
+- `battery_voltage` zůstává na konstantních ~11,9 V a **tuto hodnotu nelze použít**.
+  Leze i do telemetrie, takže sloupec `esc_v` v záznamu letu je pro tuhle desku
+  neplatný.
+- Konstantu **záměrně nenulujeme**: `battery_voltage` řídí i rychlost změny střídy
+  (`map(battery_voltage, 800, 2200, 10, 1)`, `Src/main.c:1517`). Současná hodnota
+  dává rozumných 7, nula by dala 15 a motor by měnil výkon dvakrát rychleji.
+
+Pozor na past, na kterou jsme naletěli: kalibrace v **jediném** pracovním bodě dala
+věrohodnou konstantu 113, odpovídající běžnému děliči 100k/10k. Ověření pak souhlasilo,
+protože porovnávalo hodnotu s tím, na co byla předtím nastavena. Dvoubodové měření
+při dvou různých napětích to odhalí okamžitě.
