@@ -21,3 +21,6 @@ Keil_Projects/Listings
 /Debug/
 windows-tools.zip
 .settings/
+
+# Konfigurace CL-ESC neni build artefakt (viz cl-esc/README.md)
+!cl-esc/*.bin

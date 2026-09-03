@@ -2135,6 +2135,32 @@
 #define CUSTOM_RAMP
 #endif
 
+// CL-ESC: DYS Aria 70A (STM32F051K8 + FD6288Q) pro upoutane modely.
+// Pinout prevzat z ARIA_RAMP_F051 a overen merenim na desce: dolni gate piny
+// PB1/PB0/PA7 stahuji faze k zemi, signal je na PA2, telemetrie na PB6.
+// Bez CUSTOM_RAMP - rampu si rizeni dela samo.
+#ifdef CL_ARIA_F051
+#define FILE_NAME "CL_ARIA_F051"
+#define FIRMWARE_NAME "CL Aria 70A "
+#define DEAD_TIME 45
+#define HARDWARE_GROUP_F0_A
+#define USE_SERIAL_TELEMETRY
+#define VOLTAGE_ADC_CHANNEL LL_ADC_CHANNEL_6
+#define VOLTAGE_ADC_PIN LL_GPIO_PIN_6
+#define CURRENT_ADC_CHANNEL LL_ADC_CHANNEL_3
+#define CURRENT_ADC_PIN LL_GPIO_PIN_3
+// Zmereno na kuse c. 1: 1062 mV na PA6 pri 11,982 V na ploskach V+/V-.
+// 113 dava 12,00 V (+0,02), 112 by davalo 11,89 V (-0,09).
+#define TARGET_VOLTAGE_DIVIDER 113
+// Proud zmeren proti laboratornimu zdroji pri 17 000 1/min bez vrtule:
+// 1,14 A -> raw 22,6 a 1,19 A -> raw 25,2, v klidu raw = 0 (charakteristika
+// prochazi pocatkem, takze CURRENT_OFFSET zustava 0). Vazeny prumer dava
+// 20,2 dilku ADC na ampér. POZOR: kalibrovano jen okolo 1 A, coz je u 70A
+// regulatoru uplny zacatek rozsahu - pred provoznim pouzitim preverit pri
+// proudu blizsim skutecne zatezi.
+#define MILLIVOLT_PER_AMP 16
+#endif
+
 #ifdef HVFLYCOLOR_F051
 #define FILE_NAME "HVFLYCOLOR_F051"
 #define FIRMWARE_NAME "FLYCOLOR HV "
