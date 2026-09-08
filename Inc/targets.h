@@ -2177,6 +2177,11 @@
 // coz je dost na potlaceni zakmitu a zaroven kratsi nez povelovy pulz z casovace.
 #define CL_SERVO_TONES
 #define CL_TONE_DEBOUNCE 20
+#define CL_SERVO_CONFIG // nastaveni regulatoru povelem z casovace po signalovem vodici
+#define CL_CFG_SET 0x01 // zapsat bajt EEPROM do RAM (addr 5-47)
+#define CL_CFG_COMMIT 0x02 // ulozit do flash a znovu nacist; addr/val musi byt 0x5A/0xA5
+#define CL_CFG_DISCARD 0x03 // zahodit neulozene zmeny
+#define CL_CFG_READ 0x04 // poslat 48 bajtu EEPROM v info paketu po telemetrii
 // Stavova RGB LED na desce. Spolecna anoda na 3,3 V, katody pres odpory do
 // procesoru -> barva sviti pri NULE na pinu. Piny zmereny na kuse c. 1.
 //   cervena PA15, zelena PB3, modra PB4

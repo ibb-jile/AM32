@@ -311,6 +311,11 @@ volatile uint8_t max_ramp_startup = RAMP_SPEED_STARTUP;
 volatile uint8_t max_ramp_low_rpm = RAMP_SPEED_LOW_RPM;
 volatile uint8_t max_ramp_high_rpm = RAMP_SPEED_HIGH_RPM;
 char send_esc_info_flag;
+#ifdef CL_SERVO_CONFIG
+extern volatile uint8_t cl_cfg_cmd;  // povel z casovace, 0 = nic ceka
+extern volatile uint8_t cl_cfg_addr; // adresa bajtu EEPROM (u COMMIT polovina klice)
+extern volatile uint8_t cl_cfg_val;  // hodnota (u COMMIT druha polovina klice)
+#endif
 uint32_t eeprom_address = EEPROM_START_ADD; 
 uint16_t prop_brake_duty_cycle = 0;
 uint16_t ledcounter = 0;
@@ -2163,6 +2168,44 @@ if(zero_crosses < 5){
            send_telem_DMA(49);
            send_esc_info_flag = 0;
         }
+
+#ifdef CL_SERVO_CONFIG
+        // CL-ESC: povel z casovace prisel po signalovem vodici (viz signal.c).
+        // Dekoduje se v preruseni, ale vykonava az tady, protoze mazani stranky
+        // flash trva desitky ms a v preruseni od vstupniho zachytu by to shodilo
+        // mereni delky pulzu i komutaci.
+        if (cl_cfg_cmd) {
+            uint8_t cmd = cl_cfg_cmd;
+            uint8_t addr = cl_cfg_addr;
+            uint8_t val = cl_cfg_val;
+            cl_cfg_cmd = 0;
+            if (!running) {
+                switch (cmd) {
+                case CL_CFG_SET:
+                    // Bajt 0 je branou bootloaderu a 1-4 nesou verzi. Kdyby je
+                    // casovac prepsal, deska uz nepujde spravit jinak nez programatorem.
+                    if (addr >= 5 && addr < 48) {
+                        eepromBuffer.buffer[addr] = val;
+                    }
+                    break;
+                case CL_CFG_COMMIT:
+                    // Dvoubajtovy klic navic k CRC: zapis do flash nesmi jit vyvolat
+                    // nahodnou zamenou prikazu.
+                    if (addr == 0x5A && val == 0xA5) {
+                        saveEEpromSettings();
+                        loadEEpromSettings(); // precte flash zpet a prepocita odvozene meze
+                    }
+                    break;
+                case CL_CFG_DISCARD:
+                    loadEEpromSettings(); // zahodi neulozene zmeny v RAM
+                    break;
+                case CL_CFG_READ:
+                    send_esc_info_flag = 1;
+                    break;
+                }
+            }
+        }
+#endif
         if (PROCESS_ADC_FLAG == 1) { // for adc and telemetry set adc counter at 1khz loop rate
 #if defined(STMICRO)
             ADC_DMA_Callback();

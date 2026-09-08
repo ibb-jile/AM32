@@ -95,12 +95,145 @@ static void clServoTone(uint16_t pulse)
 }
 #endif
 
+#ifdef CL_SERVO_CONFIG
+// ---------------------------------------------------------------------------
+// CL-ESC: datovy kanal na signalovem vodici - nastaveni regulatoru z casovace.
+//
+// Duvod: nastaveni jako motor_kv nebo pocet polu se dnes da zmenit jen programatorem
+// nebo konfiguratorem pres bootloader, tedy s modelem na stole a rozebranym drakem.
+// Casovac ale uz je k regulatoru pripojeny dvema vodici - signalem a telemetrii -
+// a oba jsou v modelu natrvalo. Tenhle kanal je vyuzije, takze se nic neprepajuje:
+//
+//   casovac -> ESC   povel po signalovem vodici (tady)
+//   ESC -> casovac   48 bajtu EEPROM v info paketu po telemetrii (makeInfoPacket)
+//
+// Kodovani: kazdy servo snimek nese jeden symbol podle delky pulzu.
+//
+//   805-955 us, krok 10 us  -> datovy pulnibble 0-15 (16 symbolu)
+//   975 us                  -> SYNC, zacatek ramce
+//   cokoli jineho           -> mezera
+//
+// Vsechny symboly lezi pod prahem stopu i pod pasmy tonu (od 1000 us), takze je
+// regulator porad cte jako nulovy plyn a pipani to nijak nekrizi. Casovac mezi
+// symboly vklada svuj klidovy pulz (1200 us) jako mezeru, aby sly dva stejne
+// symboly za sebou rozlisit.
+//
+// Ramec = SYNC + 8 nibblu = cmd, addr, val, crc8. Pri 250 Hz a peti snimcich na
+// symbol trva jeden povel asi 180 ms.
+//
+// BEZPECNOST:
+//  - povel se prijme az po dvou shodnych snimcich, takze jeden ruseny pulz nic nezmeni,
+//  - ramec chrani CRC8 (stejny polynom jako telemetrie),
+//  - za behu motoru se nic neaplikuje,
+//  - zapisovat lze jen bajty 5-47. Bajt 0 je branou bootloaderu a bajty 1-4 nesou
+//    verzi; prepsat je znamena rozbit desku tak, ze uz ji casovac nespravi.
+// ---------------------------------------------------------------------------
+#define CL_SYM_BASE 805
+#define CL_SYM_STEP 10
+#define CL_SYM_TOL 4
+#define CL_SYM_SYNC 975
+
+extern uint8_t get_crc8(uint8_t* Buf, uint8_t BufLen);
+
+volatile uint8_t cl_cfg_cmd = 0;
+volatile uint8_t cl_cfg_addr = 0;
+volatile uint8_t cl_cfg_val = 0;
+
+// Vraci 0-15 pro datovy symbol, 16 pro SYNC, -1 pro mezeru.
+static int8_t clSymbol(uint16_t pulse)
+{
+    if (pulse >= CL_SYM_SYNC - CL_SYM_TOL && pulse <= CL_SYM_SYNC + CL_SYM_TOL) {
+        return 16;
+    }
+    if (pulse < CL_SYM_BASE - CL_SYM_TOL) {
+        return -1;
+    }
+    int16_t d = (int16_t)pulse - CL_SYM_BASE;
+    int16_t n = (d + CL_SYM_STEP / 2) / CL_SYM_STEP;
+    if (n < 0 || n > 15) {
+        return -1;
+    }
+    int16_t err = d - n * CL_SYM_STEP;
+    if (err > CL_SYM_TOL || err < -CL_SYM_TOL) { // mezi mrizkou - radeji zahodit
+        return -1;
+    }
+    return (int8_t)n;
+}
+
+static int8_t cl_sym_held = -1;  // symbol drzeny v predchozich snimcich
+static uint8_t cl_sym_count = 0; // kolik snimcu za sebou uz drzi
+static uint8_t cl_sym_taken = 0; // uz byl prijat, ceka se na mezeru
+static uint8_t cl_nib[8];
+static uint8_t cl_nib_count = 0;
+static uint8_t cl_rx_active = 0;
+
+static void clServoConfig(uint16_t pulse)
+{
+    int8_t sym = clSymbol(pulse);
+
+    if (sym < 0) { // mezera - dalsi symbol smi zacit
+        cl_sym_held = -1;
+        cl_sym_count = 0;
+        cl_sym_taken = 0;
+        return;
+    }
+    if (sym != cl_sym_held) {
+        cl_sym_held = sym;
+        cl_sym_count = 0;
+        cl_sym_taken = 0;
+    }
+    if (cl_sym_taken || ++cl_sym_count < 2) {
+        return;
+    }
+    cl_sym_taken = 1;
+
+    if (sym == 16) { // SYNC zacina ramec kdykoli, i uprostred rozdelaneho
+        cl_rx_active = 1;
+        cl_nib_count = 0;
+        return;
+    }
+    if (!cl_rx_active) {
+        return;
+    }
+    cl_nib[cl_nib_count++] = (uint8_t)sym;
+    if (cl_nib_count < 8) {
+        return;
+    }
+    cl_rx_active = 0;
+
+    uint8_t body[3];
+    body[0] = (cl_nib[0] << 4) | cl_nib[1]; // cmd
+    body[1] = (cl_nib[2] << 4) | cl_nib[3]; // addr
+    body[2] = (cl_nib[4] << 4) | cl_nib[5]; // val
+    if (get_crc8(body, 3) != (uint8_t)((cl_nib[6] << 4) | cl_nib[7])) {
+        return;
+    }
+    // Sum v datovem pasmu obcas poskladá ramec, ktery CRC8 projde - je to jeden
+    // pripad z 256. Kontrola rozsahu povelu z toho ubere dalsich sestnact
+    // sedmnactin a stoji jedno porovnani.
+    if (body[0] < CL_CFG_SET || body[0] > CL_CFG_READ) {
+        return;
+    }
+    if (running) { // za letu se nenastavuje nic
+        return;
+    }
+    // Zapis flash i pretazeni nastaveni patri do hlavni smycky, ne do preruseni
+    // od vstupniho zachytu - mazani stranky trva desitky ms.
+    cl_cfg_addr = body[1];
+    cl_cfg_val = body[2];
+    cl_cfg_cmd = body[0]; // az jako posledni, hlavni smycka ceka na nej
+}
+#endif
+
 void computeServoInput()
 {
     if (((dma_buffer[1] - dma_buffer[0]) > 800) && ((dma_buffer[1] - dma_buffer[0]) < 2200)) {
 				signaltimeout = 0;
 #ifdef CL_SERVO_TONES
         clServoTone(dma_buffer[1] - dma_buffer[0]);
+#endif
+#ifdef CL_SERVO_CONFIG
+        clServoConfig(dma_buffer[1] - dma_buffer[0]);
 #endif
         if (calibration_required) {
             if (!high_calibration_set) {
