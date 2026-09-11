@@ -182,7 +182,7 @@ static void clServoConfig(uint16_t pulse)
         cl_sym_count = 0;
         cl_sym_taken = 0;
     }
-    if (cl_sym_taken || ++cl_sym_count < 2) {
+    if (cl_sym_taken || ++cl_sym_count < 3) { // tri shodne snimky: jeden zakmit nesmi projit jako symbol
         return;
     }
     cl_sym_taken = 1;

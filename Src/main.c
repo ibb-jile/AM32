@@ -312,6 +312,8 @@ volatile uint8_t max_ramp_low_rpm = RAMP_SPEED_LOW_RPM;
 volatile uint8_t max_ramp_high_rpm = RAMP_SPEED_HIGH_RPM;
 char send_esc_info_flag;
 #ifdef CL_SERVO_CONFIG
+#define CL_CFG_FRAMES 6              // 48 bajtu nastaveni po osmi
+uint8_t cl_cfg_reply = 0;            // kolik ramcu odpovedi jeste odeslat
 extern volatile uint8_t cl_cfg_cmd;  // povel z casovace, 0 = nic ceka
 extern volatile uint8_t cl_cfg_addr; // adresa bajtu EEPROM (u COMMIT polovina klice)
 extern volatile uint8_t cl_cfg_val;  // hodnota (u COMMIT druha polovina klice)
@@ -2158,10 +2160,25 @@ if(zero_crosses < 5){
 #endif
         if (send_telemetry) {
 #ifdef USE_SERIAL_TELEMETRY
+#ifdef CL_SERVO_CONFIG
+            // Kdyz casovac pozadal o nastaveni, jde misto telemetrickeho ramce ven
+            // jeho kus. Sest ramcu na sest telemetrickych tiku je asi 200 ms a
+            // telemetrie o ne jen na tu chvili prijde.
+            if (cl_cfg_reply) {
+                makeConfigPacket(CL_CFG_FRAMES - cl_cfg_reply);
+                send_telem_DMA(10);
+                cl_cfg_reply--;
+                send_telemetry = 0;
+                goto cl_telem_hotovo;
+            }
+#endif
             makeTelemPackage((int8_t)degrees_celsius, battery_voltage, actual_current,
                 (uint16_t)(consumed_current >> 16), e_rpm);
             send_telem_DMA(10);
             send_telemetry = 0;
+#ifdef CL_SERVO_CONFIG
+cl_telem_hotovo:;
+#endif
 #endif
         } else if(send_esc_info_flag ) {
            makeInfoPacket();
@@ -2200,7 +2217,7 @@ if(zero_crosses < 5){
                     loadEEpromSettings(); // zahodi neulozene zmeny v RAM
                     break;
                 case CL_CFG_READ:
-                    send_esc_info_flag = 1;
+                    cl_cfg_reply = CL_CFG_FRAMES;
                     break;
                 }
             }

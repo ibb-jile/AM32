@@ -22,5 +22,6 @@ extern uint8_t aTxBuffer[49] __attribute__((aligned(4)));
 
 void makeTelemPackage(int8_t temp, uint16_t voltage, uint16_t current, uint16_t consumption, uint16_t e_rpm);
 void makeInfoPacket(void);
+void makeConfigPacket(uint8_t index);
 
 #endif

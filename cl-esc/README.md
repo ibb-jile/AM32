@@ -175,8 +175,23 @@ baterie:
 
 | směr | vodič | co po něm jde |
 |---|---|---|
-| ESC → časovač | telemetrie (PB6) | 48 bajtů EEPROM + CRC8 v info paketu (`makeInfoPacket`) |
+| ESC → časovač | telemetrie (PB6) | 48 bajtů EEPROM v šesti telemetrických rámcích |
 | časovač → ESC | signál (PA2) | povel zakódovaný do délky servo pulzů |
+
+### Past: info paket AM32 se po sériové telemetrii neodešle
+
+První verze používala na odpověď `makeInfoPacket()` a `send_telem_DMA(49)`, tedy
+hotový mechanismus AM32. **Nefunguje.** Změřeno na hardwaru: povel se dekóduje,
+větev se prokazatelně provede (ověřeno počítadlem v telemetrii), ale na drátě
+se neobjeví nic — zatímco tatáž funkce s deseti bajty vozí telemetrii celou dobu
+bez jediné chyby CRC. Info paket se v AM32 běžně používá jen přes DShot, takže
+po sériové telemetrii zjevně nikdy nejel.
+
+Odpověď proto jde jako **šest obyčejných desetibajtových rámců** po ověřené cestě:
+značka `0xC0`–`0xC5`, osm bajtů EEPROM, CRC8. Značka leží v poli teploty, kde by
+znamenala −64 až −59 °C, takže se s měřením nesplete. Rámce se posílají místo
+telemetrických, jeden na každý telemetrický tik — celé nastavení je za ~200 ms
+a telemetrie o ně přijde jen na tu chvíli.
 
 ### Kódování povelu
 

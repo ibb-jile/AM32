@@ -17,7 +17,10 @@ awk '/^#ifdef CL_SERVO_CONFIG$/{f=1;next} f&&/^#endif$/{exit} f' "$AM32/Src/sign
 
 # odesilatel: od konstant symbolu po escVystupObsazen()
 A=$(grep -n '^const int ESC_SYM_BASE' "$TIMER" | cut -d: -f1)
-B=$(grep -n '^bool escVystupObsazen()' "$TIMER" | tail -1 | cut -d: -f1)
+# Konec bloku je prvni radek za odesilatelem, at uz je to most do bootloaderu
+# nebo primo escVystupObsazen(). Bez toho se do testu pritahne i kod mostu,
+# ktery na Arduino knihovnach zavisi a mimo desku se neprelozi.
+B=$(awk -v a="$A" 'NR>a && (/^\/\/ ---------- Most do bootloaderu/ || /^bool escVystupObsazen\(\)/) {print NR; exit}' "$TIMER")
 sed -n "${A},$((B - 1))p" "$TIMER" > snd.inc
 
 [ -s dec.inc ] && [ -s snd.inc ] || { echo "extrakce selhala"; exit 1; }
